@@ -1,454 +1,124 @@
-# .github/workflows/security-scan.yml
-name: 🔒 Django Security Scan
+name: Django Semgrep (logs only)
 
 on:
   push:
-    branches: [ main, develop, security/* ]
+    branches: [ main, develop, "security/*" ]
     paths:
-      - '**.py'
-      - '.github/workflows/security-scan.yml'
-      - 'requirements*.txt'
-      - '**/settings*.py'
-  
+      - "**/*.py"
+      - "requirements*.txt"
+      - "**/settings*.py"
+      - ".semgrep/**"
+      - ".github/workflows/security-scan.yml"
   pull_request:
     branches: [ main, develop ]
     paths:
-      - '**.py'
-      - '.github/workflows/security-scan.yml'
-  
+      - "**/*.py"
+      - "requirements*.txt"
+      - "**/settings*.py"
+      - ".semgrep/**"
+      - ".github/workflows/security-scan.yml"
   schedule:
-    # Run daily security scans at 2 AM UTC
-    - cron: '0 2 * * *'
-  
+    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       scan_type:
-        description: 'Type of security scan'
+        description: "Type of security scan"
         required: true
-        default: 'full'
+        default: "full"
         type: choice
-        options:
-          - 'full'
-          - 'quick'
-          - 'django-only'
-          - 'python-only'
+        options: [ "full", "quick", "django-only", "python-only" ]
       fail_on_findings:
-        description: 'Fail workflow if findings detected'
+        description: "Fail workflow if ERROR findings detected"
         required: false
         default: true
         type: boolean
 
 env:
-  PYTHON_VERSION: '3.11'
-  DJANGO_SETTINGS_MODULE: 'myapp.settings.test'
-  SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+  PYTHON_VERSION: "3.11"
 
 jobs:
-  # =================================================================
-  # SECURITY SCAN - MAIN JOB
-  # =================================================================
-  security-scan:
-    name: 🛡️ Security Analysis
+  semgrep:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
-      actions: read
-      pull-requests: write
-    
-    steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Full history for better analysis
 
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v4
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
 
-      - name: 📦 Install Dependencies
+      - name: Install Semgrep + jq
         run: |
           python -m pip install --upgrade pip
           pip install semgrep
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          sudo apt-get update -y
+          sudo apt-get install -y jq
 
-      # -----------------------------------------------------------------
-      # DOWNLOAD SECURITY RULES
-      # -----------------------------------------------------------------
-      - name: 📋 Download Django Security Rules
+      - name: Validate rules
         run: |
-          mkdir -p .semgrep
-          
-          # Download the comprehensive Django security rules
-          curl -s https://raw.githubusercontent.com/your-org/django-security-rules/main/django-owasp-security.yml \
-            -o .semgrep/django-security-rules.yml || \
-            echo "⚠️ Using fallback local rules"
-          
-          # Create custom project-specific rules if they exist
-          if [ -f ".semgrep/custom-rules.yml" ]; then
-            echo "✅ Found custom project rules"
-          fi
+          test -s .semgrep/django-security-rules.yml
+          semgrep --validate --config .semgrep/django-security-rules.yml
 
-      # -----------------------------------------------------------------
-      # DETERMINE SCAN CONFIGURATION
-      # -----------------------------------------------------------------
-      - name: 🔧 Configure Scan Parameters
-        id: config
+      - name: Run Semgrep (logs)
         run: |
+          set -euo pipefail
+
           SCAN_TYPE="${{ github.event.inputs.scan_type || 'full' }}"
           FAIL_ON_FINDINGS="${{ github.event.inputs.fail_on_findings || 'true' }}"
-          
-          echo "scan_type=$SCAN_TYPE" >> $GITHUB_OUTPUT
-          echo "fail_on_findings=$FAIL_ON_FINDINGS" >> $GITHUB_OUTPUT
-          
-          # Set scan timeout based on type
-          case $SCAN_TYPE in
-            'quick') TIMEOUT="300" ;;      # 5 minutes
-            'django-only') TIMEOUT="600" ;; # 10 minutes
-            'python-only') TIMEOUT="450" ;; # 7.5 minutes
-            'full') TIMEOUT="900" ;;        # 15 minutes
-            *) TIMEOUT="600" ;;
-          esac
-          
-          echo "timeout=$TIMEOUT" >> $GITHUB_OUTPUT
 
-      # -----------------------------------------------------------------
-      # RUN SEMGREP SECURITY SCAN
-      # -----------------------------------------------------------------
-      - name: 🔍 Run Semgrep Security Analysis
-        id: semgrep
-        continue-on-error: true
-        run: |
-          echo "🔍 Starting Django security scan (type: ${{ steps.config.outputs.scan_type }})"
-          
-          # Base command
-          SEMGREP_CMD="semgrep \
+          TIMEOUT=900
+          INCLUDE_ARGS=( "--include" "**/*.py" )
+
+          if [ "$SCAN_TYPE" = "quick" ]; then
+            TIMEOUT=300
+            INCLUDE_ARGS=( "--include" "**/settings*.py" "--include" "**/views.py" )
+          elif [ "$SCAN_TYPE" = "django-only" ]; then
+            TIMEOUT=600
+            INCLUDE_ARGS=( "--include" "**/settings*.py" "--include" "**/models.py" "--include" "**/views.py" )
+          elif [ "$SCAN_TYPE" = "python-only" ]; then
+            TIMEOUT=450
+            INCLUDE_ARGS=( "--include" "**/*.py" "--exclude" "**/migrations/**" "--exclude" "**/tests/**" )
+          fi
+
+          echo "=== Semgrep Django scan start ==="
+          echo "scan_type=$SCAN_TYPE timeout=$TIMEOUT"
+
+          semgrep scan \
             --config .semgrep/django-security-rules.yml \
             --metrics=off \
-            --json \
-            --output semgrep-results.json \
+            --no-git-ignore \
+            --json --output semgrep-results.json \
             --time \
-            --timeout ${{ steps.config.outputs.timeout }}"
-          
-          # Add scan-type specific configurations
-          case "${{ steps.config.outputs.scan_type }}" in
-            'django-only')
-              SEMGREP_CMD="$SEMGREP_CMD --include='**/settings*.py' --include='**/models.py' --include='**/views.py'"
-              ;;
-            'python-only')
-              SEMGREP_CMD="$SEMGREP_CMD --include='*.py' --exclude='**/migrations/**' --exclude='**/tests/**'"
-              ;;
-            'quick')
-              SEMGREP_CMD="$SEMGREP_CMD --include='**/settings*.py' --include='**/views.py' --severity ERROR"
-              ;;
-          esac
-          
-          # Execute scan
-          echo "Running: $SEMGREP_CMD"
-          set -o pipefail
-          $SEMGREP_CMD 2>&1 | tee semgrep-output.log
-          
-          # Capture exit code
-          SEMGREP_EXIT_CODE=$?
-          echo "exit_code=$SEMGREP_EXIT_CODE" >> $GITHUB_OUTPUT
-          
-          # Parse results
-          if [ -f semgrep-results.json ]; then
-            FINDINGS_COUNT=$(jq '.results | length' semgrep-results.json 2>/dev/null || echo "0")
-            echo "findings_count=$FINDINGS_COUNT" >> $GITHUB_OUTPUT
-            
-            ERRORS_COUNT=$(jq '[.results[] | select(.extra.severity == "ERROR")] | length' semgrep-results.json 2>/dev/null || echo "0")
-            echo "errors_count=$ERRORS_COUNT" >> $GITHUB_OUTPUT
-            
-            WARNINGS_COUNT=$(jq '[.results[] | select(.extra.severity == "WARNING")] | length' semgrep-results.json 2>/dev/null || echo "0")
-            echo "warnings_count=$WARNINGS_COUNT" >> $GITHUB_OUTPUT
-          else
-            echo "findings_count=0" >> $GITHUB_OUTPUT
-            echo "errors_count=0" >> $GITHUB_OUTPUT
-            echo "warnings_count=0" >> $GITHUB_OUTPUT
-          fi
+            --timeout "$TIMEOUT" \
+            "${INCLUDE_ARGS[@]}"
 
-      # -----------------------------------------------------------------
-      # SECURITY SCAN SUMMARY
-      # -----------------------------------------------------------------
-      - name: 📊 Generate Security Report
-        if: always() && steps.semgrep.outcome != 'skipped'
-        run: |
-          echo "=== 🔒 Django Security Scan Summary ===" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Total Findings** | ${{ steps.semgrep.outputs.findings_count }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **🔴 Errors** | ${{ steps.semgrep.outputs.errors_count }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **🟡 Warnings** | ${{ steps.semgrep.outputs.warnings_count }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Scan Type** | ${{ steps.config.outputs.scan_type }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Exit Code** | ${{ steps.semgrep.outputs.exit_code }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Add findings details if they exist
-          if [ "${{ steps.semgrep.outputs.findings_count }}" -gt 0 ] && [ -f semgrep-results.json ]; then
-            echo "### 📋 Top Security Findings" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            
-            # Show top 5 findings
-            jq -r '.results[:5] | .[] | "- **\(.extra.severity)**: \(.check_id) in `\(.path):\(.start.line)`"' semgrep-results.json >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
-            
-            if [ "${{ steps.semgrep.outputs.findings_count }}" -gt 5 ]; then
-              echo "- ... and $(( ${{ steps.semgrep.outputs.findings_count }} - 5 )) more findings" >> $GITHUB_STEP_SUMMARY
-            fi
-          fi
+          echo ""
+          echo "=== Summary ==="
+          TOTAL=$(jq '.results | length' semgrep-results.json)
+          ERRORS=$(jq '[.results[] | select(.extra.severity=="ERROR")] | length' semgrep-results.json)
+          WARNINGS=$(jq '[.results[] | select(.extra.severity=="WARNING")] | length' semgrep-results.json)
+          INFOS=$(jq '[.results[] | select(.extra.severity=="INFO")] | length' semgrep-results.json)
 
-      # -----------------------------------------------------------------
-      # UPLOAD ARTIFACTS
-      # -----------------------------------------------------------------
-      - name: 📤 Upload Security Results
-        if: always() && steps.semgrep.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-scan-results
-          path: |
+          echo "Total:   $TOTAL"
+          echo "ERROR:   $ERRORS"
+          echo "WARNING: $WARNINGS"
+          echo "INFO:    $INFOS"
+
+          echo ""
+          echo "=== Findings ==="
+          jq -r '.results
+            | sort_by(.check_id, .path, .start.line)
+            | .[]
+            | "\(.extra.severity) | \(.check_id) | \(.path):\(.start.line) | \(.extra.message)"' \
             semgrep-results.json
-            semgrep-output.log
-          retention-days: 30
 
-      # -----------------------------------------------------------------
-      # UPLOAD TO GITHUB SECURITY ADVISORIES
-      # -----------------------------------------------------------------
-      - name: 🚨 Upload to GitHub Security Tab
-        if: steps.semgrep.outputs.findings_count > 0
-        uses: github/codeql-action/upload-sarif@v3
-        continue-on-error: true
-        with:
-          sarif_file: semgrep-results.json
-          category: django-security
-
-      # -----------------------------------------------------------------
-      # POST COMMENT ON PR
-      # -----------------------------------------------------------------
-      - name: 💬 Post PR Comment
-        if: github.event_name == 'pull_request' && steps.semgrep.outputs.findings_count > 0
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const findingsCount = ${{ steps.semgrep.outputs.findings_count }};
-            const errorsCount = ${{ steps.semgrep.outputs.errors_count }};
-            const warningsCount = ${{ steps.semgrep.outputs.warnings_count }};
-            const scanType = '${{ steps.config.outputs.scan_type }}';
-            
-            const status = errorsCount > 0 ? '❌ FAILED' : '⚠️ ISSUES FOUND';
-            const emoji = errorsCount > 0 ? '🚨' : '⚠️';
-            
-            const comment = `## ${emoji} Django Security Scan Results
-            
-            **Status**: ${status}
-            **Scan Type**: \`${scanType}\`
-            **Total Findings**: ${findingsCount}
-            - 🔴 **Errors**: ${errorsCount}
-            - 🟡 **Warnings**: ${warningsCount}
-            
-            ### 🔍 Next Steps
-            ${errorsCount > 0 
-              ? '⚠️ **Critical security issues detected!** Please review and fix these issues before merging.'
-              : '⚠️ **Security warnings found.** Consider addressing these issues to improve security posture.'
-            }
-            
-            ### 📊 Detailed Report
-            Full security scan results are available in the [Actions artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
-            
-            ---
-            <details>
-            <summary>🔧 How to Fix</summary>
-            
-            1. **Review the findings** in the detailed report
-            2. **Fix critical errors** first (severity: ERROR)
-            3. **Address warnings** when possible (severity: WARNING)
-            4. **Re-run the scan** after making changes
-            5. **Consider adding** \`@login_required\` decorators and input validation
-            
-            </details>
-            
-            ---
-            *Generated by Django Security Scan - Workflow: \`${{ github.workflow }}\`*
-            `;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
-
-      # -----------------------------------------------------------------
-      # FAIL WORKFLOW IF CONFIGURED
-      # -----------------------------------------------------------------
-      - name: ❌ Fail on Security Findings
-        if: steps.config.outputs.fail_on_findings == 'true' && steps.semgrep.outputs.errors_count > 0
-        run: |
-          echo "❌ Security scan failed with ${{ steps.semgrep.outputs.errors_count }} critical errors"
-          echo "🔍 Review the detailed results in the Security tab or download artifacts"
-          exit 1
-
-  # =================================================================
-  # SUPPLEMENTARY SECURITY CHECKS
-  # =================================================================
-  dependency-scan:
-    name: 📦 Dependency Security Check
-    runs-on: ubuntu-latest
-    needs: security-scan
-    if: always()
-    
-    steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: 🔍 Run Safety Check (Dependencies)
-        run: |
-          pip install safety
-          safety check --json --output safety-results.json || true
-          
-          # Parse results
-          if [ -f safety-results.json ]; then
-            VULN_COUNT=$(jq '[.[]] | length' safety-results.json 2>/dev/null || echo "0")
-            echo "Found $VULN_COUNT vulnerable dependencies"
+          if [ "$FAIL_ON_FINDINGS" = "true" ] && [ "$ERRORS" -gt 0 ]; then
+            echo ""
+            echo "❌ Failing because ERROR findings > 0"
+            exit 1
           fi
 
-      - name: 📤 Upload Dependency Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-scan-results
-          path: safety-results.json
-          retention-days: 30
-
-  # =================================================================
-  # DJANGO SPECIFIC SECURITY CHECKS
-  # =================================================================
-  django-security-check:
-    name: 🔧 Django Security Check
-    runs-on: ubuntu-latest
-    needs: security-scan
-    if: always()
-    
-    steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: 📦 Install Django
-        run: |
-          pip install django django-extensions
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-      - name: 🔍 Run Django Security Check
-        run: |
-          # Run Django's built-in security check
-          python manage.py check --deploy --settings=${{ env.DJANGO_SETTINGS_MODULE }} > django-security-check.txt 2>&1 || true
-          
-          # Check for common Django security issues
-          python -c "
-          import os
-          import re
-          
-          # Check settings.py for security issues
-          settings_files = []
-          for root, dirs, files in os.walk('.'):
-              for file in files:
-                  if file == 'settings.py' or 'settings' in root and file.endswith('.py'):
-                      settings_files.append(os.path.join(root, file))
-          
-          issues = []
-          for settings_file in settings_files:
-              try:
-                  with open(settings_file, 'r') as f:
-                      content = f.read()
-                      
-                  # Check for security issues
-                  if 'DEBUG = True' in content:
-                      issues.append(f'{settings_file}: DEBUG=True detected')
-                  if 'SECRET_KEY =' in content and 'os.environ' not in content:
-                      issues.append(f'{settings_file}: Hardcoded SECRET_KEY detected')
-                  if 'ALLOWED_HOSTS = [\"*\"]' in content:
-                      issues.append(f'{settings_file}: Wildcard ALLOWED_HOSTS detected')
-              except Exception as e:
-                  pass
-          
-          # Write results
-          with open('django-manual-checks.json', 'w') as f:
-              import json
-              json.dump({'issues': issues, 'count': len(issues)}, f, indent=2)
-          "
-          
-          echo "Django security check completed"
-
-      - name: 📤 Upload Django Check Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: django-security-check-results
-          path: |
-            django-security-check.txt
-            django-manual-checks.json
-          retention-days: 30
-
-  # =================================================================
-  # SECURITY METRICS AND REPORTING
-  # =================================================================
-  security-metrics:
-    name: 📈 Security Metrics
-    runs-on: ubuntu-latest
-    needs: [security-scan, dependency-scan, django-security-check]
-    if: always()
-    
-    steps:
-      - name: 📥 Download All Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: security-results
-
-      - name: 📊 Generate Security Dashboard
-        run: |
-          echo "# 🔒 Django Security Dashboard" > security-dashboard.md
-          echo "" >> security-dashboard.md
-          echo "## 📋 Summary" >> security-dashboard.md
-          echo "" >> security-dashboard.md
-          
-          # Semgrep results
-          if [ -f security-results/security-scan-results/semgrep-results.json ]; then
-            SEMGREP_COUNT=$(jq '.results | length' security-results/security-scan-results/semgrep-results.json 2>/dev/null || echo "0")
-            echo "- **Semgrep Findings**: $SEMGREP_COUNT" >> security-dashboard.md
-          fi
-          
-          # Dependency results
-          if [ -f security-results/dependency-scan-results/safety-results.json ]; then
-            DEP_COUNT=$(jq '[.[]] | length' security-results/dependency-scan-results/safety-results.json 2>/dev/null || echo "0")
-            echo "- **Vulnerable Dependencies**: $DEP_COUNT" >> security-dashboard.md
-          fi
-          
-          # Django check results
-          if [ -f security-results/django-security-check-results/django-manual-checks.json ]; then
-            DJANGO_COUNT=$(jq '.count' security-results/django-security-check-results/django-manual-checks.json 2>/dev/null || echo "0")
-            echo "- **Django Manual Checks**: $DJANGO_COUNT" >> security-dashboard.md
-          fi
-          
-          echo "" >> security-dashboard.md
-          echo "## 🕒 Generated" >> security-dashboard.md
-          echo "- **Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> security-dashboard.md
-          echo "- **Workflow**: ${{ github.workflow }}" >> security-dashboard.md
-          echo "- **Run ID**: ${{ github.run_id }}" >> security-dashboard.md
-
-      - name: 📤 Upload Security Dashboard
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-dashboard
-          path: security-dashboard.md
-          retention-days: 90
+          echo "=== Semgrep Django scan end ==="
