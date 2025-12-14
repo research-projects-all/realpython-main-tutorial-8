@@ -57,6 +57,18 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y jq
 
+      # Always show the area that used to fail, BEFORE validation
+      - name: Debug YAML around suspected error line
+        run: |
+          echo "=== file exists & size ==="
+          ls -lah .semgrep/django-security-rules.yml || true
+          echo ""
+          echo "=== context around line 743 ==="
+          nl -ba .semgrep/django-security-rules.yml | sed -n '735,750p' || true
+          echo ""
+          echo "=== accidental filename text occurrences (if any) ==="
+          grep -n "\.semgrep/django-security-rules\.yml" .semgrep/django-security-rules.yml || true
+
       - name: Validate rules
         run: |
           test -s .semgrep/django-security-rules.yml
@@ -66,8 +78,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          SCAN_TYPE="${{ github.event.inputs.scan_type || 'full' }}"
-          FAIL_ON_FINDINGS="${{ github.event.inputs.fail_on_findings || 'true' }}"
+          # Inputs exist only for workflow_dispatch; for push/PR/schedule they are empty.
+          SCAN_TYPE="${{ github.event.inputs.scan_type }}"
+          FAIL_ON_FINDINGS="${{ github.event.inputs.fail_on_findings }}"
+
+          if [ -z "${SCAN_TYPE:-}" ]; then SCAN_TYPE="full"; fi
+          if [ -z "${FAIL_ON_FINDINGS:-}" ]; then FAIL_ON_FINDINGS="true"; fi
 
           TIMEOUT=900
           INCLUDE_ARGS=( "--include" "**/*.py" )
@@ -84,7 +100,7 @@ jobs:
           fi
 
           echo "=== Semgrep Django scan start ==="
-          echo "scan_type=$SCAN_TYPE timeout=$TIMEOUT"
+          echo "scan_type=$SCAN_TYPE timeout=$TIMEOUT fail_on_findings=$FAIL_ON_FINDINGS"
 
           semgrep scan \
             --config .semgrep/django-security-rules.yml \
