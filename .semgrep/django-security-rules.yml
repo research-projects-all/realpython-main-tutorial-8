@@ -1,12 +1,8 @@
-# django-owasp-security.yml
-# Django Security Rules - Converted from Spring Boot ruleset
-# Updated: 2024-12-15
-
 rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A03 Injection (SQL)
   # ============================================================
-  
+
   - id: DJANGO-OWASP-SQLI-RAW-QUERY
     message: >
       Possible SQL injection: user input reaches raw SQL queries.
@@ -48,7 +44,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A03 Injection (OS Command)
   # ============================================================
-  
+
   - id: DJANGO-OWASP-CMDI-SUBPROCESS
     message: >
       Possible OS command injection: user input reaches subprocess calls.
@@ -84,7 +80,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A03 Injection (Template Injection/SSTI)
   # ============================================================
-  
+
   - id: DJANGO-OWASP-SSTI-TEMPLATE-RENDER
     message: >
       Possible Django template injection: user input reaches template rendering without sanitization.
@@ -119,7 +115,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A03 Injection (XSS)
   # ============================================================
-  
+
   - id: DJANGO-OWASP-XSS-UNSAFE-RENDER
     message: >
       Possible XSS: user input rendered without proper escaping in Django templates.
@@ -159,10 +155,10 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A01 Broken Access Control
   # ============================================================
-  
+
   - id: DJANGO-OWASP-MISSING-AUTH-DECORATOR
     message: >
-      Django view lacks authentication/authorization. Use @login_required, @permission_required, 
+      Django view lacks authentication/authorization. Use @login_required, @permission_required,
       or custom decorators. Tutorials often omit security - add proper authentication.
     severity: ERROR
     languages: [python]
@@ -202,7 +198,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A01 Broken Access Control (Object Level)
   # ============================================================
-  
+
   - id: DJANGO-OWASP-OBJECT-LEVEL-AUTH
     message: >
       Missing object-level authorization: user can access any object by ID.
@@ -242,7 +238,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A02 Cryptographic Failures
   # ============================================================
-  
+
   - id: DJANGO-OWASP-WEAK-HASHING-MD5-SHA1
     message: >
       Weak cryptographic hashing algorithm detected (MD5/SHA-1).
@@ -270,7 +266,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A02 Cryptographic Failures (Password Storage)
   # ============================================================
-  
+
   - id: DJANGO-OWASP-INSECURE-PASSWORD-HASH
     message: >
       Insecure password hashing: storing passwords in plain text or using weak algorithms.
@@ -298,7 +294,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A04 Insecure Design (Mass Assignment)
   # ============================================================
-  
+
   - id: DJANGO-OWASP-MASS-ASSIGNMENT-MODelform
     message: >
       Potential mass assignment risk: ModelForm without explicit fields/exclude.
@@ -336,7 +332,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A08 Software and Data Integrity Failures
   # ============================================================
-  
+
   - id: DJANGO-OWASP-PICKLE-INSECURE
     message: >
       Insecure deserialization: pickle/cPickle used with user-controlled data.
@@ -369,7 +365,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A09 Security Logging Failures
   # ============================================================
-  
+
   - id: DJANGO-OWASP-LOG-INJECTION-FORMATTING
     message: >
       Unsafe logging pattern: string formatting in logger calls.
@@ -398,7 +394,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A10 SSRF
   # ============================================================
-  
+
   - id: DJANGO-OWASP-SSRF-URLFETCH
     message: >
       Possible SSRF: user input reaches URL fetching functions (urllib, requests).
@@ -438,7 +434,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A06 Vulnerable and Outdated Components
   # ============================================================
-  
+
   - id: DJANGO-OWASP-DEBUG-ENABLED
     message: >
       DEBUG=True detected in production settings. This exposes sensitive information.
@@ -463,7 +459,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A05 Security Misconfiguration
   # ============================================================
-  
+
   - id: DJANGO-OWASP-SECRET-KEY-HARDCODED
     message: >
       Hardcoded Django SECRET_KEY detected. This should be loaded from environment variables.
@@ -490,7 +486,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A05 Security Misconfiguration (CORS)
   # ============================================================
-  
+
   - id: DJANGO-OWASP-CORS-PERMISSIVE
     message: >
       Permissive CORS configuration detected (CORS_ALLOW_ALL_ORIGINS=True or allow_all_origins=True).
@@ -516,7 +512,7 @@ rules:
   # ============================================================
   # Django - OWASP Top 10:2021 — A05 Security Misconfiguration (ALLOWED_HOSTS)
   # ============================================================
-  
+
   - id: DJANGO-OWASP-ALLOWED-HOSTS-WILDCARD
     message: >
       ALLOWED_HOSTS=['*'] detected. This allows requests from any host.
@@ -541,7 +537,7 @@ rules:
   # ============================================================
   # Django - Custom: CSRF Protection Missing
   # ============================================================
-  
+
   - id: DJANGO-OWASP-CSRF-DISABLED
     message: >
       CSRF protection appears disabled (@csrf_exempt used). Avoid disabling CSRF for state-changing operations.
@@ -563,12 +559,13 @@ rules:
     pattern-either:
       - pattern: "@csrf_exempt"
       - pattern: "@csrf_exempt(...)"
-      - pattern: CsrfViewMiddleware not in settings.MIDDLEWARE
+      # syntax fix: this must be regex, not a Python expression
+      - pattern-regex: CsrfViewMiddleware\s+not\s+in\s+settings\.MIDDLEWARE
 
   # ============================================================
   # Django - Custom: SQL Injection (Extra with ORM)
   # ============================================================
-  
+
   - id: DJANGO-OWASP-SQLI-EXTRA-WITH-PARAMS
     message: >
       Possible SQL injection: .extra() with improperly parameterized WHERE clause.
@@ -597,7 +594,7 @@ rules:
   # ============================================================
   # Django - Custom: LDAP Injection
   # ============================================================
-  
+
   - id: DJANGO-OWASP-LDAP-INJECTION-FILTER
     message: >
       Possible LDAP injection: user input reaches LDAP filter construction.
@@ -628,7 +625,7 @@ rules:
   # ============================================================
   # Django - Custom: XPath Injection
   # ============================================================
-  
+
   - id: DJANGO-OWASP-XPATH-INJECTION-LXML
     message: >
       Possible XPath injection: user input reaches XPath expressions.
@@ -658,7 +655,7 @@ rules:
   # ============================================================
   # Django - Custom: XML External Entity (XXE)
   # ============================================================
-  
+
   - id: DJANGO-OWASP-XXE-XMLPARSER
     message: >
       Potential XXE risk: XML parsing without disabling external entities.
@@ -694,7 +691,7 @@ rules:
   # ============================================================
   # Django - Custom: Deserialization Risks
   # ============================================================
-  
+
   - id: DJANGO-OWASP-YAML-UNSAFE-LOAD
     message: >
       Unsafe YAML loading: yaml.load() used without Loader=yaml.SafeLoader.
@@ -720,7 +717,7 @@ rules:
   # ============================================================
   # Django - Custom: JSON Injection
   # ============================================================
-  
+
   - id: DJANGO-OWASP-JSON-INJECTION-UNSAFE
     message: >
       Possible JSON injection: user input concatenated into JSON strings.
@@ -753,7 +750,7 @@ rules:
   # ============================================================
   # Django - Custom: Open Redirect
   # ============================================================
-  
+
   - id: DJANGO-OWASP-OPEN-REDIRECT-UNVALIDATED
     message: >
       Possible open redirect: user input used in HttpResponseRedirect without validation.
@@ -790,7 +787,7 @@ rules:
   # ============================================================
   # Django - Custom: HTTP Method Validation
   # ============================================================
-  
+
   - id: DJANGO-OWASP-HTTP-METHOD-VALIDATION
     message: >
       Missing HTTP method validation: state-changing operations allow GET requests.
@@ -824,7 +821,7 @@ rules:
   # ============================================================
   # Django - Custom: File Upload Security
   # ============================================================
-  
+
   - id: DJANGO-OWASP-FILE-UPLOAD-UNVALIDATED
     message: >
       Unvalidated file upload: missing file type and size validation.
@@ -863,7 +860,7 @@ rules:
   # ============================================================
   # Django - Custom: Email Header Injection
   # ============================================================
-  
+
   - id: DJANGO-OWASP-EMAIL-HEADER-INJECTION
     message: >
       Possible email header injection: user input in email headers without validation.
@@ -900,7 +897,7 @@ rules:
   # ============================================================
   # Django - Custom: Cache Poisoning
   # ============================================================
-  
+
   - id: DJANGO-OWASP-CACHE-POISONING-UNVALIDATED
     message: >
       Possible cache poisoning: user input used in cache keys without validation.
@@ -938,7 +935,7 @@ rules:
   # ============================================================
   # Django - Positive Rules (Good Practices)
   # ============================================================
-  
+
   - id: POS-DJANGO-SECURE-FILEFIELD-UPLOAD
     message: >
       Good practice: FileField with upload_to and validators for secure file uploads.
