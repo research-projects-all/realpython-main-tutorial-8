@@ -740,9 +740,10 @@ rules:
       - pattern: request.GET.get(...)
       - pattern: request.POST.get(...)
     pattern-sinks:
-      - pattern: f'{{"key": "{$VAR}"}}'
+      - pattern: "f'{{\"key\": \"{$VAR}\"}}'"
       - pattern: '{"key": "' + $VAR + '"}'
       - pattern: '{"key": "%s"}' % $VAR
+
     pattern-sanitizers:
       - pattern: json.dumps({..., "key": $VAR, ...})
       - pattern: JsonResponse({..., "key": $VAR, ...})
