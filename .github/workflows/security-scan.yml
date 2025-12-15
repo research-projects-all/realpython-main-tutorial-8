@@ -84,7 +84,6 @@ jobs:
 
           echo "=== Semgrep Django scan start ==="
           echo "scan_type=$SCAN_TYPE timeout=$TIMEOUT fail_on_findings=$FAIL_ON_FINDINGS"
-          echo "ruleset=.semgrep/django-security-rules.yml"
           echo ""
 
           semgrep scan \
