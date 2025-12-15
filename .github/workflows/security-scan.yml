@@ -57,7 +57,13 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y jq
       
+      - name: Debug File Path
+        run: |
+          pwd
+          ls -R
+          
       - name: Validate Semgrep Rules
+        # Update this path based on the output of ls -R
         run: semgrep validate .semgrep/spring-owasp-springmvc.yml
 
 
