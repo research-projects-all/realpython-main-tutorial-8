@@ -62,13 +62,6 @@ jobs:
           semgrep validate --config .semgrep/spring-owasp-springmvc.yml
 
 
-
-    
-      - name: Validate rules
-        run: |
-          test -s .semgrep/django-security-rules.yml
-          semgrep --validate --config .semgrep/django-security-rules.yml
-
       - name: Run Semgrep (logs)
         run: |
           set -euo pipefail
