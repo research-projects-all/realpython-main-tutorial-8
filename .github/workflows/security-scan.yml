@@ -57,12 +57,17 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y jq
 
-      - name: Run Semgrep (logs)
-        shell: bash
+    
+      - name: Validate rules
         run: |
-          set -uo pipefail
+          test -s .semgrep/django-security-rules.yml
+          semgrep --validate --config .semgrep/django-security-rules.yml
 
-          # workflow_dispatch has inputs; push/PR/schedule do not.
+      - name: Run Semgrep (logs)
+        run: |
+          set -euo pipefail
+
+          # Inputs exist only for workflow_dispatch; for push/PR/schedule they are empty.
           SCAN_TYPE="${{ github.event.inputs.scan_type }}"
           FAIL_ON_FINDINGS="${{ github.event.inputs.fail_on_findings }}"
 
@@ -85,9 +90,7 @@ jobs:
 
           echo "=== Semgrep Django scan start ==="
           echo "scan_type=$SCAN_TYPE timeout=$TIMEOUT fail_on_findings=$FAIL_ON_FINDINGS"
-          echo ""
 
-          SEMGREP_EXIT=0
           semgrep scan \
             --config .semgrep/django-security-rules.yml \
             --metrics=off \
@@ -95,15 +98,7 @@ jobs:
             --json --output semgrep-results.json \
             --time \
             --timeout "$TIMEOUT" \
-            "${INCLUDE_ARGS[@]}" 2>&1 | tee semgrep-output.log || SEMGREP_EXIT=$?
-
-          if [ "$SEMGREP_EXIT" -ne 0 ]; then
-            echo ""
-            echo "❌ Semgrep failed with exit code $SEMGREP_EXIT"
-            echo "=== Semgrep output (last 200 lines) ==="
-            tail -n 200 semgrep-output.log || true
-            exit "$SEMGREP_EXIT"
-          fi
+            "${INCLUDE_ARGS[@]}"
 
           echo ""
           echo "=== Summary ==="
@@ -131,5 +126,4 @@ jobs:
             exit 1
           fi
 
-          echo ""
           echo "=== Semgrep Django scan end ==="
