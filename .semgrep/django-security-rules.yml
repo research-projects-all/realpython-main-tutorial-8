@@ -280,7 +280,10 @@ rules:
       - pattern: request.GET.get(...)
       - pattern: request.POST.get(...)
     pattern-sinks:
-      - pattern: "(&(objectClass=$CLASS)(uid=$USER))"
+      # FIX: Added outer single quotes and inner double quotes to match string literals
+      - pattern: '"(&(objectClass=$CLASS)(uid=$USER))"'
+      # FIX: Added f-string support which is common in Python 3
+      - pattern: 'f"(&(objectClass={$CLASS})(uid={$USER}))"'
       - pattern: filter_string.format(...)
 
   - id: DJANGO-OWASP-XXE-XMLPARSER
