@@ -57,6 +57,13 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y jq
 
+      - name: Validate Semgrep YAML files
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yq
+          yq e '.' .semgrep/spring-owasp-springmvc.yml > /dev/null
+
+
     
       - name: Validate rules
         run: |
