@@ -57,9 +57,8 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y jq
       
-      - name: Validate Semgrep config
-        run: |
-          semgrep validate --config .semgrep/spring-owasp-springmvc.yml
+      - name: Validate Semgrep Rules
+        run: semgrep validate .semgrep/spring-owasp-springmvc.yml
 
 
       - name: Run Semgrep (logs)
