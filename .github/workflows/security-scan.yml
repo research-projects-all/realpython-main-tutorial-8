@@ -56,12 +56,11 @@ jobs:
           pip install semgrep
           sudo apt-get update -y
           sudo apt-get install -y jq
-
-      - name: Validate Semgrep YAML files
+      
+      - name: Validate Semgrep config
         run: |
-          sudo apt-get update
-          sudo apt-get install -y yq
-          yq e '.' .semgrep/spring-owasp-springmvc.yml > /dev/null
+          semgrep validate --config .semgrep/spring-owasp-springmvc.yml
+
 
 
     
