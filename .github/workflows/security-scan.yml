@@ -1,4 +1,4 @@
-name: Django Semgrep (logs only)
+name: Django Semgrep - Custom (logs only)
 
 on:
   push:
