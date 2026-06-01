@@ -1,0 +1,23 @@
+name: Sonar analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run PySonar
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          pysonar \
+            --sonar-token="$SONAR_TOKEN" \
+            --sonar-project-key=research-projects-all_realpython-main-tutorial-8 \
+            --sonar-organization=research-projects-all \
+            --sonar-python-version=3.11
